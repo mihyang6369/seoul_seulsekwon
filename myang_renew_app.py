@@ -17,14 +17,36 @@ import datetime
 # 1. Configuration & Constants
 # ==========================================
 
-# 현재 파일 위치 기준 설정
+# .env 파일 로드 (부모 디렉토리의 .env 탐색)
+# .env 파일 로드 (부모 디렉토리의 .env 탐색)
+import os
+from dotenv import load_dotenv
+
+# 현재 파일 위치: .../seulsekwon_project/share/storage/renew_app.py
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
-# .env 파일 로드 (로컬 개발용)
-load_dotenv(os.path.join(current_dir, '.env'))
+# 예상되는 .env 위치 후보들
+# 1. seulsekwon_project/.env (현재 파일 기준 상위 3단계)
+# 2. pj/.env (현재 파일 기준 상위 4단계 - 프로젝트 루트)
+possible_paths = [
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))), '.env'), # seulsekwon_project/.env
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))), '.env') # pj/.env
+]
 
-# 데이터 폴더 경로 (로컬/배포 공통)
-data_dir = os.path.join(current_dir, "data")
+env_path = None
+for path in possible_paths:
+    if os.path.exists(path):
+        env_path = path
+        break
+
+# .env 파일이 발견되면 로드, 없으면 경고 메시지 출력 (혹은 무시)
+if env_path:
+    load_dotenv(env_path)
+    print(f".env loaded from: {env_path}") # 디버깅용 출력
+else:
+    print("Warning: .env file not found.")
+
+base_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir))) # 기존 base_dir 유지 (seulsekwon_project)
 
 st.set_page_config(
     page_title="서울 슬세권 분석 시스템 v2.5",
@@ -433,12 +455,17 @@ def get_dong_name(address):
 @st.cache_data
 def load_infrastructure_data():
     """최종 통합된 인프라 데이터를 로드합니다."""
-    # 배포용 및 로컬 공용 상대 경로 설정
-    file_path = os.path.join(data_dir, "seoul_combined_data_final_v3.csv")
+    # 최종 통합 및 중복 제거된 데이터 파일 경로
+    file_path = "/Users/kimsuhyun/Desktop/fcicb6/seoul_seulsekwon/share/data/seoul_combined_data_final_v3.csv"
     
     if not os.path.exists(file_path):
-        st.error(f"데이터 파일을 찾을 수 없습니다: {file_path}")
-        return pd.DataFrame()
+        # 상대 경로 시도
+        current_dir = os.path.dirname(__file__)
+        file_path = os.path.join(current_dir, "..", "data", "seoul_combined_data_final_v3.csv")
+        
+        if not os.path.exists(file_path):
+            st.error(f"데이터 파일을 찾을 수 없습니다: {file_path}")
+            return pd.DataFrame()
 
     try:
         df = pd.read_csv(file_path)
@@ -674,17 +701,15 @@ def get_ai_analysis_report(t_score, counts, weights):
 @st.cache_data
 def load_real_estate_data():
     """서울 부동산 실거래가 통합 데이터를 데이터프레임으로 로드합니다."""
-    # 배포용 및 로컬 공용 상대 경로 설정
-    file_path = os.path.join(data_dir, "seoul_real_estate_combined_2023_2026_geo.csv")
+    # 데이터 파일 경로 설정
+    file_path = "share/data/seoul_real_estate_combined_2023_2026_geo.csv"
+    if not os.path.exists(file_path):
+        # 파일이 없을 경우 상대 경로 재시도
+        file_path = os.path.join(os.path.dirname(__file__), "..", "data", "seoul_real_estate_combined_2023_2026_geo.csv")
     
     if not os.path.exists(file_path):
-        # 대용량 파일이 data/cleaned 등 하위 폴더에 있는 경우를 대비한 추가 탐색
-        alt_path = os.path.join(data_dir, "cleaned", "seoul_real_estate_combined_2023_2026_geo.csv")
-        if os.path.exists(alt_path):
-            file_path = alt_path
-        else:
-            st.error(f"부동산 데이터 파일을 찾을 수 없습니다: {file_path}")
-            return pd.DataFrame()
+        st.error("부동산 데이터 파일을 찾을 수 없습니다.")
+        return pd.DataFrame()
 
     try:
         # 필요한 열만 선택하여 로드
